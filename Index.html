@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#5dade2">
+    <title>Breathing Box</title>
+    
+    <link rel="manifest" href="manifest.json">
+    
+    <link rel="apple-touch-icon" href="icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <style>
+        /* Prevent text selection and rubber-banding on mobile */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f4f8;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #333;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        .widget-container {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 90%;
+            max-width: 350px;
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+        }
+
+        .controls {
+            margin-top: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+        }
+
+        label {
+            font-size: 0.9rem;
+            color: #666;
+            font-weight: 600;
+        }
+        
+        .description {
+            margin-top: 5px;
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #5dade2;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="widget-container">
+        <canvas id="breatheCanvas" width="300" height="300"></canvas>
+
+        <div class="controls">
+            <div>
+                <label for="speedSlider">Cycle Speed</label>
+                <input type="range" id="speedSlider" min="0.5" max="2.0" step="0.1" value="1.0">
+                <div class="description">4s In / 7s Hold / 8s Out</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- PWA Service Worker Registration ---
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("sw.js")
+                .then(() => console.log("Service Worker Registered"));
+        }
+
+        // --- Widget Logic ---
+        const canvas = document.getElementById('breatheCanvas');
+        const ctx = canvas.getContext('2d');
+        const slider = document.getElementById('speedSlider');
+
+        const minSize = 100;
+        const maxSize = 180;
+        const color = '#5dade2';
+        
+        const phases = [
+            { name: "Inhale...", duration: 4, type: 'grow' },
+            { name: "Hold...",   duration: 7, type: 'static' },
+            { name: "Exhale...", duration: 8, type: 'shrink' }
+        ];
+
+        let speedMultiplier = 1.0; 
+        let phaseIndex = 0;       
+        let startTimestamp = null;
+
+        function easeInOutQuad(t) {
+            return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        }
+
+        function animate(timestamp) {
+            if (!startTimestamp) startTimestamp = timestamp;
+
+            const deltaTime = (timestamp - startTimestamp) / 1000 * speedMultiplier; 
+            const currentPhase = phases[phaseIndex];
+            
+            if (deltaTime >= currentPhase.duration) {
+                phaseIndex = (phaseIndex + 1) % phases.length;
+                startTimestamp = timestamp; 
+                requestAnimationFrame(animate);
+                return;
+            }
+
+            const progress = deltaTime / currentPhase.duration;
+            let currentSize = minSize;
+
+            if (currentPhase.type === 'grow') {
+                currentSize = minSize + (maxSize - minSize) * easeInOutQuad(progress);
+            } else if (currentPhase.type === 'static') {
+                currentSize = maxSize;
+            } else if (currentPhase.type === 'shrink') {
+                currentSize = maxSize - (maxSize - minSize) * easeInOutQuad(progress);
+            }
+
+            // Draw
+            // Scale for high DPI
+            const dpr = window.devicePixelRatio || 1;
+            // Note: Canvas size is set in HTML, we just draw relative to it
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const center = canvas.width / 2;
+
+            ctx.fillStyle = color;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = "rgba(93, 173, 226, 0.6)";
+
+            ctx.beginPath();
+            ctx.roundRect(
+                center - currentSize / 2, 
+                center - currentSize / 2, 
+                currentSize, 
+                currentSize, 
+                25
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0; 
+
+            ctx.fillStyle = "#4a4a4a"; // Slightly darker text for contrast
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+
+            ctx.font = "bold 20px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+            ctx.fillText(currentPhase.name, center, center - 12);
+
+            const secondsLeft = Math.ceil(currentPhase.duration - deltaTime);
+            ctx.font = "16px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+            ctx.fillStyle = "#7f8c8d";
+            ctx.fillText(secondsLeft + "s", center, center + 18);
+
+            requestAnimationFrame(animate);
+        }
+
+        slider.addEventListener('input', (e) => {
+            speedMultiplier = parseFloat(e.target.value);
+        });
+
+        requestAnimationFrame(animate);
+    </script>
+</body>
+</html>
